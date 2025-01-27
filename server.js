@@ -19,6 +19,7 @@ app.use(
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false },
+    store: new session.MemoryStore(),
   })
 );
 
