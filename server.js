@@ -7,11 +7,14 @@ import env from "dotenv";
 import fs from "fs";
 import bcrypt from "bcrypt";
 import session from "express-session";
+import { fileURLToPath } from "url";
 
 env.config();
 
 const app = express();
 const port = process.env.LOCALHOST_PORT;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 app.use(
   session({
@@ -22,6 +25,25 @@ app.use(
     store: new session.MemoryStore(),
   })
 );
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static("public"));
+
+const uploadsDir = path.join(__dirname, "public/uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+app.use("/uploads", express.static(uploadsDir));
+
+const db = new pg.Client({
+  user: process.env.PG_USER,
+  host: process.env.PG_HOST,
+  database: process.env.PG_DATABASE,
+  password: process.env.PG_PASSWORD,
+  port: process.env.PG_PORT,
+});
+db.connect();
 
 const storage = multer.diskStorage({
   destination: "./public/uploads",
@@ -34,18 +56,6 @@ const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
-
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static("public"));
-
-const db = new pg.Client({
-  user: process.env.PG_USER,
-  host: process.env.PG_HOST,
-  database: process.env.PG_DATABASE,
-  password: process.env.PG_PASSWORD,
-  port: process.env.PG_PORT,
-});
-db.connect();
 
 function isAuthenticated(req, res, next) {
   if (req.session && req.session.user) {
@@ -128,7 +138,7 @@ app.get("/players/:id", async (req, res) => {
     const result = await db.query("SELECT * FROM players WHERE id = $1", [id]);
 
     if (!result) {
-      res.status(404).send("Dog not found");
+      res.status(404).send("Player not found");
       return;
     }
 
@@ -136,7 +146,7 @@ app.get("/players/:id", async (req, res) => {
       player: result.rows[0],
     });
   } catch (err) {
-    console.error("Error fetching dog details:", err);
+    console.error("Error fetching player details:", err);
     res.status(500).send("Internal Server Error");
   }
 });
@@ -156,7 +166,7 @@ app.get("/classes", async (req, res) => {
       });
     }
   } catch (err) {
-    console.error("Error fetching dog data:", err);
+    console.error("Error fetching player data:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -322,7 +332,11 @@ app.post(
       }
 
       if (image && currentPlayer.rows[0].image) {
-        const oldImagePath = path.join("public", currentPlayer.rows[0].image);
+        const oldImagePath = path.join(
+          __dirname,
+          "public",
+          currentPlayer.rows[0].image
+        );
         if (fs.existsSync(oldImagePath)) {
           try {
             fs.unlinkSync(oldImagePath);
